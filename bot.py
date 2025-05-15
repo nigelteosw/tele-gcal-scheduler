@@ -6,6 +6,7 @@ from datetime import datetime
 from dotenv import load_dotenv
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
+from datetime import datetime, timedelta, timezone
 
 # Load environment variables
 load_dotenv()
@@ -58,6 +59,44 @@ def get_upcoming_events():
         message += f"• {start_time} – {summary}\n"
     return message
 
+def get_events_between(start_dt: datetime, end_dt: datetime):
+    events_result = calendar_service.events().list(
+        calendarId=CALENDAR_ID,
+        timeMin=start_dt.isoformat(),
+        timeMax=end_dt.isoformat(),
+        singleEvents=True,
+        orderBy='startTime'
+    ).execute()
+
+    events = events_result.get('items', [])
+    if not events:
+        return None
+
+    message = ""
+    for event in events:
+        start = event['start'].get('dateTime', event['start'].get('date'))
+        start_time = datetime.fromisoformat(start).strftime("%a %d %b %I:%M %p")
+        summary = event.get("summary", "No title")
+        message += f"• {start_time} – {summary}\n"
+    return message
+
+
+def get_today_events():
+    now = datetime.now(timezone.utc)
+    start = datetime(now.year, now.month, now.day, tzinfo=timezone.utc)
+    end = start + timedelta(days=1)
+    message = get_events_between(start, end)
+    return message or "No events scheduled today!"
+
+
+def get_week_events():
+    now = datetime.now(timezone.utc)
+    start = datetime(now.year, now.month, now.day, tzinfo=timezone.utc)
+    days_until_sunday = (6 - now.weekday()) % 7 + 1  # Monday=0...Sunday=6
+    end = start + timedelta(days=days_until_sunday)
+    message = get_events_between(start, end)
+    return message or "No events scheduled for the rest of the week!"
+
 def lambda_handler(event, context):
     try:
         logger.info("Incoming event: " + json.dumps(event))
@@ -78,8 +117,20 @@ def lambda_handler(event, context):
         elif text == "/upcoming":
             msg = get_upcoming_events()
             send_message(chat_id, msg, markdown=True)
+        elif text == "/today":
+            msg = get_today_events()
+            send_message(chat_id, f"📆 *Today's Schedule:*\n\n{msg}", markdown=True)
+        elif text == "/week":
+            msg = get_week_events()
+            send_message(chat_id, f"🗓 *This Week's Events:*\n\n{msg}", markdown=True)
         elif text == "/help":
-            msg = "🤖 *Available Commands:*\n/start – Welcome\n/upcoming – View next 5 events"
+            msg = (
+                "*Available Commands:*\n"
+                "/start - Welcome\n"
+                "/upcoming - View next 5 events\n"
+                "/today - View today's events\n"
+                "/week - View this week's events"
+            )
             send_message(chat_id, msg, markdown=True)
         else:
             send_message(chat_id, "❓ Unknown command. Try /help.")
@@ -89,4 +140,3 @@ def lambda_handler(event, context):
     except Exception as e:
         logger.error(f"❌ Error: {e}")
         return {'statusCode': 500, 'body': 'Internal Server Error'}
-
