@@ -13,7 +13,7 @@ load_dotenv()
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 CALENDAR_ID = os.getenv("GOOGLE_CALENDAR_ID")
 SERVICE_ACCOUNT_FILE = os.getenv("SERVICE_ACCOUNT_FILE")
-ALLOWED_USERNAME = ["laurenkoek", "nigelus"]
+ALLOWED_USERNAME = []
 
 # Logging
 logger = logging.getLogger()
@@ -168,6 +168,7 @@ def lambda_handler(event, context):
         send_message(chat_id, f"🌞 Good morning! Here's your schedule:\n\n{msg}", markdown=True)
         return {'statusCode': 200, 'body': 'Sent daily calendar'}
     
+    # === Handle Message Trigger ===
     try:
         logger.info("Incoming event: " + json.dumps(event))
 
