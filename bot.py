@@ -60,12 +60,12 @@ class CalendarEvent:
             str: Formatted event string with aligned layout.
         """
         if self.is_all_day:
-            date_str = self.start.strftime("`%a %d %b`")
+            date_str = self.start.strftime("%a %d %b")
             return f"{date_str}   All Day\n            - {self.summary}"
         else:
-            date_str = self.start.strftime("`%a %d %b`")
+            date_str = self.start.strftime("%a %d %b")
             time_str = f"{self.start.strftime('%I:%M %p')} - {self.end.strftime('%I:%M %p')}"
-            return f"{date_str}   *{self.summary}*\n            - {time_str}"
+            return f"{date_str} |   *{self.summary}*\n            ({time_str})\n"
 
 
 
@@ -94,9 +94,9 @@ def get_upcoming_events():
 
     items = events_result.get('items', [])
     if not items:
-        return "🗓 No upcoming events found!"
+        return "No upcoming events found!"
 
-    message = "📅 *Next Events:*\n"
+    message = ""
     for raw_event in items:
         event = CalendarEvent(raw_event)
         message += event.format() + "\n"
@@ -174,10 +174,10 @@ def lambda_handler(event, context):
             return {'statusCode': 200, 'body': 'Unauthorized'}
 
         if text == "/start":
-            send_message(chat_id, f"👋 Hi {username}! I can help manage your calendar.\nTry /help to view all available commands.")
+            send_message(chat_id, f"👋 Hi @{username}! I can help manage your calendar.\nTry /help to view all available commands.")
         elif text == "/upcoming":
             msg = get_upcoming_events()
-            send_message(chat_id, msg, markdown=True)
+            send_message(chat_id, f"*Upcoming Events:*\n\n{msg}", markdown=True)
         elif text == "/today":
             msg = get_today_events()
             send_message(chat_id, f"*Today's Schedule:*\n\n{msg}", markdown=True)

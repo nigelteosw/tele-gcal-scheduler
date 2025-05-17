@@ -1,3 +1,5 @@
 .env
 lambda_package
 config
+__pycache__/
+*.py[cod]
