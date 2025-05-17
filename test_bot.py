@@ -23,6 +23,17 @@ def main():
     # Call the Lambda handler
     response = lambda_handler(test_event, context)
     print("Lambda Response:", response)
+    
+def test_scheduler_event():
+    test_event = { "source": "aws.scheduler",
+                  "job": "daily_calendar"}
+
+    class Context: pass
+    context = Context()
+
+    response = lambda_handler(test_event, context)
+    print("Scheduler Test Response:", response)
 
 if __name__ == "__main__":
-    main()
+    # main()
+    test_scheduler_event()

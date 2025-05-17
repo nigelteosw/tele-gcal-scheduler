@@ -157,6 +157,17 @@ def get_week_events() -> str:
     return get_events_between(start, end) or "No events scheduled for the rest of the week!"
 
 def lambda_handler(event, context):
+    source = event.get("source")
+    job = event.get("job")
+
+    # === Handle EventBridge Scheduler Trigger ===
+    if source == "aws.scheduler" and job == "daily_calendar":
+        chat_id = os.getenv("JOB_CHAT_ID")
+        msg = get_today_events()
+
+        send_message(chat_id, f"🌞 Good morning! Here's your schedule:\n\n{msg}", markdown=True)
+        return {'statusCode': 200, 'body': 'Sent daily calendar'}
+    
     try:
         logger.info("Incoming event: " + json.dumps(event))
 
