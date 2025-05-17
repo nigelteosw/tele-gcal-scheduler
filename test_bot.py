@@ -7,10 +7,10 @@ def main():
             "message": {
                 "text": "/upcoming",  # Try /week, /start, etc.
                 "chat": {
-                    "id": "260013849"  # Replace with your real Telegram ID
+                    "id": "<YOUR_TELEGRAM_CHAT_ID>"  # Replace with your real Telegram ID
                 },
                 "from": {
-                    "username": "nigelus"
+                    "username": "<YOUR_USERNAME>"
                 }
             }
         })
@@ -35,5 +35,5 @@ def test_scheduler_event():
     print("Scheduler Test Response:", response)
 
 if __name__ == "__main__":
-    # main()
-    test_scheduler_event()
+    main()
+    # test_scheduler_event()
