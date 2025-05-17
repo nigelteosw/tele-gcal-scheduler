@@ -24,6 +24,51 @@ SCOPES = ['https://www.googleapis.com/auth/calendar']
 creds = service_account.Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=SCOPES)
 calendar_service = build('calendar', 'v3', credentials=creds)
 
+class CalendarEvent:
+    """
+    Represents a single Google Calendar event and provides formatting utilities.
+    Supports both all-day and timed events.
+    """
+    def __init__(self, raw_event):
+        """
+        Initialize a CalendarEvent from a raw Google Calendar API event dictionary.
+        
+        Args:
+            raw_event (dict): The raw event data from the Google Calendar API.
+        """
+        self.summary = raw_event.get("summary", "No title")
+        self.is_all_day = False
+
+        start_raw = raw_event['start'].get('dateTime') or raw_event['start'].get('date')
+        end_raw = raw_event['end'].get('dateTime') or raw_event['end'].get('date')
+
+        try:
+            self.start = datetime.fromisoformat(start_raw)
+            self.end = datetime.fromisoformat(end_raw)
+        except ValueError:
+            # All-day event
+            self.start = datetime.strptime(start_raw, "%Y-%m-%d")
+            self.end = datetime.strptime(end_raw, "%Y-%m-%d")
+            self.is_all_day = True
+
+    def format(self) -> str:
+        """
+        Format the event into a visually aligned multi-line string for Telegram Markdown.
+        Includes date, time, and summary with emojis for readability.
+
+        Returns:
+            str: Formatted event string with aligned layout.
+        """
+        if self.is_all_day:
+            date_str = self.start.strftime("`%a %d %b`")
+            return f"{date_str}   All Day\n            - {self.summary}"
+        else:
+            date_str = self.start.strftime("`%a %d %b`")
+            time_str = f"{self.start.strftime('%I:%M %p')} - {self.end.strftime('%I:%M %p')}"
+            return f"{date_str}   *{self.summary}*\n            - {time_str}"
+
+
+
 def send_message(chat_id, text, markdown=False):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     payload = {
@@ -47,19 +92,29 @@ def get_upcoming_events():
         orderBy='startTime'
     ).execute()
 
-    events = events_result.get('items', [])
-    if not events:
+    items = events_result.get('items', [])
+    if not items:
         return "🗓 No upcoming events found!"
 
     message = "📅 *Next Events:*\n"
-    for event in events:
-        start = event['start'].get('dateTime', event['start'].get('date'))
-        start_time = datetime.fromisoformat(start).strftime("%d %b %I:%M %p")
-        summary = event.get("summary", "No title")
-        message += f"• {start_time} – {summary}\n"
+    for raw_event in items:
+        event = CalendarEvent(raw_event)
+        message += event.format() + "\n"
+
     return message
 
-def get_events_between(start_dt: datetime, end_dt: datetime):
+
+def get_events_between(start_dt: datetime, end_dt: datetime) -> str:
+    """
+    Retrieves and formats Google Calendar events between two datetime ranges.
+
+    Args:
+        start_dt (datetime): Start of the time range (inclusive).
+        end_dt (datetime): End of the time range (exclusive).
+
+    Returns:
+        str: A formatted list of events or None if no events are found.
+    """
     events_result = calendar_service.events().list(
         calendarId=CALENDAR_ID,
         timeMin=start_dt.isoformat(),
@@ -72,57 +127,63 @@ def get_events_between(start_dt: datetime, end_dt: datetime):
     if not events:
         return None
 
-    message = ""
-    for event in events:
-        start = event['start'].get('dateTime', event['start'].get('date'))
-        start_time = datetime.fromisoformat(start).strftime("%a %d %b %I:%M %p")
-        summary = event.get("summary", "No title")
-        message += f"• {start_time} – {summary}\n"
-    return message
+    return "\n".join(CalendarEvent(event).format() for event in events)
 
 
-def get_today_events():
+def get_today_events() -> str:
+    """
+    Get all events scheduled for today (midnight to midnight UTC).
+
+    Returns:
+        str: Formatted string of today's events or a fallback message.
+    """
     now = datetime.now(timezone.utc)
     start = datetime(now.year, now.month, now.day, tzinfo=timezone.utc)
     end = start + timedelta(days=1)
-    message = get_events_between(start, end)
-    return message or "No events scheduled today!"
+    return get_events_between(start, end) or "No events scheduled today!"
 
 
-def get_week_events():
+def get_week_events() -> str:
+    """
+    Get all events scheduled from today until the end of the week (Sunday).
+
+    Returns:
+        str: Formatted string of this week's remaining events or a fallback message.
+    """
     now = datetime.now(timezone.utc)
     start = datetime(now.year, now.month, now.day, tzinfo=timezone.utc)
     days_until_sunday = (6 - now.weekday()) % 7 + 1  # Monday=0...Sunday=6
     end = start + timedelta(days=days_until_sunday)
-    message = get_events_between(start, end)
-    return message or "No events scheduled for the rest of the week!"
+    return get_events_between(start, end) or "No events scheduled for the rest of the week!"
 
 def lambda_handler(event, context):
     try:
         logger.info("Incoming event: " + json.dumps(event))
+
         body = json.loads(event['body'])
         message = body.get('message', {})
         text = message.get('text', '')
         chat_id = message.get('chat', {}).get('id')
         username = message.get('from', {}).get('username')
+        user_id = message.get('from', {}).get('id')
 
-        logger.info(f"chat_id: {chat_id}, username: {username}, text: {text}")
+        logger.info(f"chat_id: {chat_id}, user_id: {user_id}, username: {username}, text: {text}")
 
         if username not in ALLOWED_USERNAME:
             send_message(chat_id, "🚫 Sorry, you're not allowed to use this bot.")
             return {'statusCode': 200, 'body': 'Unauthorized'}
 
         if text == "/start":
-            send_message(chat_id, "👋 Hi Lauren! I can help manage your calendar.\nTry /help to view all available commands.")
+            send_message(chat_id, f"👋 Hi {username}! I can help manage your calendar.\nTry /help to view all available commands.")
         elif text == "/upcoming":
             msg = get_upcoming_events()
             send_message(chat_id, msg, markdown=True)
         elif text == "/today":
             msg = get_today_events()
-            send_message(chat_id, f"📆 *Today's Schedule:*\n\n{msg}", markdown=True)
+            send_message(chat_id, f"*Today's Schedule:*\n\n{msg}", markdown=True)
         elif text == "/week":
             msg = get_week_events()
-            send_message(chat_id, f"🗓 *This Week's Events:*\n\n{msg}", markdown=True)
+            send_message(chat_id, f"*This Week's Events:*\n\n{msg}", markdown=True)
         elif text == "/help":
             msg = (
                 "*Available Commands:*\n"
@@ -140,3 +201,4 @@ def lambda_handler(event, context):
     except Exception as e:
         logger.error(f"❌ Error: {e}")
         return {'statusCode': 500, 'body': 'Internal Server Error'}
+
